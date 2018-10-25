@@ -61,7 +61,7 @@ function dissallowGroupChats(bot, trigger) {
 flint.on('spawn',(bot, id) => {
     // if this is a group room we want to remove the bot
     if ( bot.isGroup || ! bot.isDirect ) {
-        bot.say("Yo someone did add me to a group room, but I can only talk in private rooms")
+        bot.say("Yo, someone did add me to a group room, but I can only talk in private rooms")
         if ( bot.addedBy ) {
             bot.dm(bot.addedBy, "text", "Hello " + bot.addedBy + " you can talk to me here")
             }
