@@ -7,6 +7,10 @@ const app = express()
 
 const url = process.env.TokenResolverURL
 
+
+// these are flint configuration settings
+// flint will register webhooks for the flint framework and dispatch to the bot
+// for this it needs to know where this app can be reached and the bot token
 const config = {
     webhookUrl:  process.env.WebhookRecipientURL,
     token: process.env.BotToken,
@@ -14,6 +18,7 @@ const config = {
 }
 
 app.use(bodyParser.json())
+
 // create and start a flint instance
 var flint = new Flint(config)
 flint.start()
@@ -42,13 +47,10 @@ function findScopeForNamedToken(res, tokenName) {
 
 function dissallowGroupChats(bot, trigger) {
 
-    if ( trigger.roomType !== 'direct') {
-        console.log("this is a message from a group")
+    if (trigger.roomType !== 'direct') {
         bot.say("I can only be used in direct messages to avoid leaking tokens")
-        bot.say("I am going to bid my farewell here and hope to see you soon in a one on one space")
-        bot.dm(trigger.personEmail, "text", "Hello " + trigger.personDisplayName + " you can talk to me here"). then (
-            (res) => { bot.exit()
-            })
+        bot.say("I am going to bid my farwell here and hope to see you soon in a one on one space")
+        bot.dm(trigger.personEmail, "text", "Hello " + trigger.personDisplayName + " you can talk to me here"). then ( () => { bot.exit() })
         return (disallowed=true)
     }
 }
@@ -56,12 +58,15 @@ function dissallowGroupChats(bot, trigger) {
 
 // tests if the bot was added to a group space, which is not what we want to allow
 // the reason is because we don't want others to see any token
-flint.on('spawn',(newBot, id) => {
+flint.on('spawn',(bot, id) => {
     // if this is a group room we want to remove the bot
-    if ( ! newBot.isDirect ) {
-        newBot.say("Yo, you did add me to a group room, but you can only talk to me directly")
-        newBot.exit()
-        flint.despawn(newBot.room.id);
+    if ( bot.isGroup || ! bot.isDirect ) {
+        bot.say("Yo someone did add me to a group room, but I can only talk in private rooms")
+        if ( bot.addedBy ) {
+            bot.dm(bot.addedBy, "text", "Hello " + bot.addedBy + " you can talk to me here")
+            }
+        bot.exit()
+        flint.despawn(bot.room.id);
     }
 })
 
@@ -74,24 +79,34 @@ flint.hears('/resolve', (bot, trigger) => {
     }
 
     const w = trigger.text.split(' ')
-    const token = w[w.length-2]
-    const name = w[w.length-1]
-    console.log("resolve called")
-    bot.say("will resolve token ... " + token.slice(-6)  + " with the name " + name)
+    const token = w[w.length-1]
 
-    try {
-        const header = new f.Headers( { 'Content-type' : 'application/json',
-            'Authorization' : `Bearer ${token}` } )
-        var results = f.default(url, {headers: header}).then((res) => {
-            return res.json()
-        }).then((res) => {
-            return findScopeForNamedToken(res.data, name)
-        }).then((scopes) => {
-            bot.say( "the scopes are... " + scopes)
-        })
-    } catch ( ex ) {
-        bot.say("Some issues arose....duh....")
-    }
+    bot.say("will resolve token ... " + token.slice(-6))
+
+    const header = new f.Headers( {
+        'Content-type' : 'application/json',
+        'Authorization' : `Bearer ${token}`,
+        'token' : `${token}`} )
+
+
+    f.default(url, {headers: header})
+            .then((res) => {
+                const status = parseInt(res.status)
+                // return findScopeForNamedToken(res.data, name)
+                if (200 <= status && status < 400) {
+                    return res.json()
+                } else {
+                    throw ("Token cannot be found or unresolveable")
+                }
+            })
+            .then((scopes) => {
+                console.log(scopes.scope)
+                bot.say("the scopes are... ")
+                bot.say(`${scopes.scope}`)
+            })
+            .catch( (ex) => {
+                bot.say(ex)
+            } )
 }, "resolve a token to a scope", 0)
 
 // that's what we want to ultimately execute
@@ -108,21 +123,14 @@ flint.hears('/hello', (bot, trigger) => {
 
 flint.hears('/help', (bot, trigger) => {
     console.log("help requested")
-    bot.say("This bot will resolve a oAuth Integration tokens into scopes. You should call me like so: /resolve TOKEN" +
-        " TOKENNAME")
+    bot.say("This bot will resolve a oAuth Integration tokens into scopes. You should call me like so: /resolve TOKEN" )
     bot.say("Yes, that\'s a leading forward slash /")
-    bot.say("The TokenName can be found in your account as Name (Name of your Integration)")
-    bot.say("I will return only information about the last token with this name")
 },"provides help menu", 0)
 
 
 flint.hears(/\/?.*/, (bot,trigger) => {
-   bot.say("unknown command received")
-    bot.say("This bot will resolve a oAuth Integration tokens into scopes. You should call me like so: /resolve TOKEN" +
-        " TOKENNAME")
-    bot.say("Yes, that\'s a leading forward slash /")
-    bot.say("The TokenName can be found in your account as Name (Name of your Integration)")
-    bot.say("I will return only information about the last token with this name")
+    bot.say("unknown command received")
+    bot.say("This bot will resolve a oAuth Integration tokens into scopes. You should call me like so: /resolve TOKEN" )
 },"unknown command received",3)
 
 
@@ -135,7 +143,7 @@ app.get('/flint', (req,res) => {
 })
 
 var server = app.listen(config.port,  () => {
-    console.log("app is not listening on port " + config.port)
+    console.log("app is now listening on port " + config.port)
     flint.debug('Flint listening on port %s', config.port);
 });
 
