@@ -42,13 +42,10 @@ function findScopeForNamedToken(res, tokenName) {
 
 function dissallowGroupChats(bot, trigger) {
 
-    if ( trigger.roomType !== 'direct') {
-        console.log("this is a message from a group")
+    if (trigger.roomType !== 'direct') {
         bot.say("I can only be used in direct messages to avoid leaking tokens")
-        bot.say("I am going to bid my farewell here and hope to see you soon in a one on one space")
-        bot.dm(trigger.personEmail, "text", "Hello " + trigger.personDisplayName + " you can talk to me here"). then (
-            (res) => { bot.exit()
-            })
+        bot.say("I am going to bid my farwell here and hope to see you soon in a one on one space")
+        bot.dm(trigger.personEmail, "text", "Hello " + trigger.personDisplayName + " you can talk to me here"). then ( () => { bot.exit() })
         return (disallowed=true)
     }
 }
@@ -56,12 +53,16 @@ function dissallowGroupChats(bot, trigger) {
 
 // tests if the bot was added to a group space, which is not what we want to allow
 // the reason is because we don't want others to see any token
-flint.on('spawn',(newBot, id) => {
+flint.on('spawn',(bot, id) => {
     // if this is a group room we want to remove the bot
-    if ( ! newBot.isDirect ) {
-        newBot.say("Yo, you did add me to a group room, but you can only talk to me directly")
-        newBot.exit()
-        flint.despawn(newBot.room.id);
+    if ( bot.isGroup || ! bot.isDirect ) {
+        bot.say("Yo, someone did add me to a group room, but I can only talk in private rooms")
+        console.log("bot addedBy is " + bot.addedBy)
+        if ( bot.addedBy ) {
+            bot.dm(bot.addedBy, "text", "Hello " + bot.addedBy + " you can talk to me here")
+            }
+        bot.exit()
+        flint.despawn(bot.room.id);
     }
 })
 
@@ -76,7 +77,7 @@ flint.hears('/resolve', (bot, trigger) => {
     const w = trigger.text.split(' ')
     const token = w[w.length-2]
     const name = w[w.length-1]
-    console.log("resolve called")
+
     bot.say("will resolve token ... " + token.slice(-6)  + " with the name " + name)
 
     try {
@@ -135,7 +136,7 @@ app.get('/flint', (req,res) => {
 })
 
 var server = app.listen(config.port,  () => {
-    console.log("app is not listening on port " + config.port)
+    console.log("app is now listening on port " + config.port)
     flint.debug('Flint listening on port %s', config.port);
 });
 
